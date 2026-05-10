@@ -40,7 +40,7 @@ from sglang.srt.managers.schedule_batch import ModelWorkerBatch, ScheduleBatch
 from sglang.srt.managers.scheduler import GenerationBatchResult
 from sglang.srt.mem_cache.allocator import BaseTokenToKVPoolAllocator
 from sglang.srt.mem_cache.memory_pool import ReqToTokenPool
-from sglang.srt.model_executor import weight_updater
+from sglang.srt.model_executor import weight_exporter, weight_updater
 from sglang.srt.model_executor.forward_batch_info import ForwardBatch, PPProxyTensors
 from sglang.srt.model_executor.pool_configurator import MemoryPoolConfig
 from sglang.srt.model_executor.weight_updater import (
@@ -130,25 +130,31 @@ class BaseTpWorker(ABC):
     def init_weights_send_group_for_remote_instance(
         self, recv_req: InitWeightsSendGroupForRemoteInstanceReqInput
     ):
-        success, message = (
-            self.model_runner.init_weights_send_group_for_remote_instance(
-                recv_req.master_address,
-                recv_req.ports,
-                recv_req.group_rank,
-                recv_req.world_size,
-                recv_req.group_name,
-                recv_req.backend,
-            )
+        success, message = weight_exporter.init_weights_send_group_for_remote_instance(
+            _weights_send_group=self.model_runner._weights_send_group,
+            tp_rank=self.model_runner.tp_rank,
+            tp_size=self.model_runner.tp_size,
+            gpu_id=self.model_runner.gpu_id,
+            master_address=recv_req.master_address,
+            ports=recv_req.ports,
+            group_rank=recv_req.group_rank,
+            world_size=recv_req.world_size,
+            group_name=recv_req.group_name,
+            backend=recv_req.backend,
         )
         return success, message
 
     def send_weights_to_remote_instance(
         self, recv_req: SendWeightsToRemoteInstanceReqInput
     ):
-        success, message = self.model_runner.send_weights_to_remote_instance(
-            recv_req.master_address,
-            recv_req.ports,
-            recv_req.group_name,
+        success, message = weight_exporter.send_weights_to_remote_instance(
+            model=self.model_runner.model,
+            _weights_send_group=self.model_runner._weights_send_group,
+            tp_rank=self.model_runner.tp_rank,
+            tp_size=self.model_runner.tp_size,
+            master_address=recv_req.master_address,
+            ports=recv_req.ports,
+            group_name=recv_req.group_name,
         )
         return success, message
 
