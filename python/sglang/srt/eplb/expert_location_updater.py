@@ -616,3 +616,49 @@ def _group_by(items, keyfunc):
     for item in items:
         ans[keyfunc(item)].append(item)
     return dict(ans)
+
+
+def update_expert_location(
+    *,
+    expert_location_updater,
+    model,
+    new_expert_location_metadata,
+    update_layer_ids,
+    nnodes,
+    tp_rank,
+    expert_backup_client,
+    update_weights_from_disk_callable,
+):
+    p2p_missing_logical_experts = expert_location_updater.update(
+        model.routed_experts_weights_of_layer,
+        new_expert_location_metadata,
+        update_layer_ids=update_layer_ids,
+        nnodes=nnodes,
+        rank=tp_rank,
+    )
+
+    if len(p2p_missing_logical_experts) > 0:
+        # Load the missing expert weights from disk
+        if callable(getattr(model, "generate_weight_name_filter", None)):
+            # Filter and load only missing expert weights
+            weight_name_filter = model.generate_weight_name_filter(
+                p2p_missing_logical_experts
+            )
+        else:
+            # Do a full reload from disk/DRAM
+            logger.info(
+                "[Elastic EP] Model does not implement generate_weight_name_filter. "
+                "Performing full weight reload."
+            )
+            weight_name_filter = None
+
+        if expert_backup_client is not None and expert_backup_client.use_backup:
+            # Load the missing weights from the DRAM backup
+            expert_backup_client.update_weights(weight_name_filter)
+        else:
+            # Load the missing weights from disk
+            update_weights_from_disk_callable(
+                model_path=get_global_server_args().model_path,
+                load_format=get_global_server_args().load_format,
+                weight_name_filter=weight_name_filter,
+            )
