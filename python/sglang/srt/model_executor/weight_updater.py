@@ -357,3 +357,21 @@ def update_weights_from_tensor(
     else:
         raise NotImplementedError(f"Unknown load_format={load_format}")
     return True, "Success"
+
+
+def update_weights_from_ipc(*, model_runner_ref, recv_req):
+    """Update weights from IPC for checkpoint-engine integration."""
+    try:
+        from sglang.srt.checkpoint_engine.checkpoint_engine_worker import (
+            SGLangCheckpointEngineWorkerExtensionImpl,
+        )
+
+        # Create a worker extension that integrates with SGLang's model
+        worker = SGLangCheckpointEngineWorkerExtensionImpl(model_runner_ref)
+        worker.update_weights_from_ipc(recv_req.zmq_handles)
+        return True, "IPC weight update completed successfully"
+    except ImportError as e:
+        return False, f"IPC weight update failed: ImportError {e}"
+    except Exception as e:
+        logger.error(f"IPC weight update failed: {e}")
+        return False, str(e)

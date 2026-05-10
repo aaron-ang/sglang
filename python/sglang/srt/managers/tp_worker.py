@@ -184,7 +184,10 @@ class BaseTpWorker(ABC):
 
     def update_weights_from_ipc(self, recv_req: UpdateWeightsFromIPCReqInput):
         """Update weights from IPC for checkpoint-engine integration."""
-        success, message = self.model_runner.update_weights_from_ipc(recv_req)
+        success, message = weight_updater.update_weights_from_ipc(
+            model_runner_ref=self.model_runner,
+            recv_req=recv_req,
+        )
         return success, message
 
     def get_weights_by_name(self, recv_req: GetWeightsByNameReqInput):
