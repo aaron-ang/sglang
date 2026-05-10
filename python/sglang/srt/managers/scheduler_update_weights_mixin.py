@@ -34,6 +34,7 @@ from sglang.srt.managers.io_struct import (
     UpdateWeightsFromTensorReqInput,
     UpdateWeightsFromTensorReqOutput,
 )
+from sglang.srt.model_executor import weight_exporter
 
 if TYPE_CHECKING:
     from sglang.srt.managers.scheduler import Scheduler
@@ -208,17 +209,26 @@ class SchedulerUpdateWeightsMixin:
     def save_remote_model(self: Scheduler, params):
         url = params["url"]
 
-        self.tp_worker.model_runner.save_remote_model(url)
+        weight_exporter.save_remote_model(
+            model=self.tp_worker.model_runner.model,
+            model_path=self.tp_worker.model_runner.model_config.model_path,
+            url=url,
+        )
 
         if self.draft_worker is not None:
             draft_url = params.get("draft_url", None)
             assert (
                 draft_url is not None
             ), "draft_url must be provided when draft model is enabled"
-            self.draft_worker.model_runner.save_remote_model(draft_url)
+            weight_exporter.save_remote_model(
+                model=self.draft_worker.model_runner.model,
+                model_path=self.draft_worker.model_runner.model_config.model_path,
+                url=draft_url,
+            )
 
     def save_sharded_model(self: Scheduler, params):
-        self.tp_worker.model_runner.save_sharded_model(
+        weight_exporter.save_sharded_model(
+            model=self.tp_worker.model_runner.model,
             path=params["path"],
             pattern=params["pattern"],
             max_size=params["max_size"],

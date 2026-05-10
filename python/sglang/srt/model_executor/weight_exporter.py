@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 import torch
 import torch.distributed as dist
@@ -118,3 +119,45 @@ def send_weights_to_remote_instance(
     torch.distributed.distributed_c10d.destroy_process_group(send_group)
     torch.cuda.empty_cache()
     return success, message
+
+
+def save_remote_model(*, model, model_path, url: str):
+    from sglang.srt.model_loader.loader import RemoteModelLoader
+
+    logger.info(f"Saving model to {url}")
+    RemoteModelLoader.save_model(model, model_path, url)
+
+
+def save_sharded_model(
+    *,
+    model,
+    path: str,
+    pattern: Optional[str] = None,
+    max_size: Optional[int] = None,
+):
+    from sglang.srt.model_loader.loader import ShardedStateLoader
+
+    logger.info(
+        f"Save sharded model to {path} with pattern {pattern} and max_size {max_size}"
+    )
+    ShardedStateLoader.save_model(model, path, pattern, max_size)
+
+
+def get_weights_by_name(
+    *,
+    model,
+    tp_size,
+    name: str,
+    truncate_size: int = 100,
+) -> Optional[torch.Tensor]:
+    """Get the weights of the parameter by its name. Similar to `get_parameter` in Hugging Face.
+
+    Only used for unit test with an unoptimized performance.
+    For optimized performance, please use torch.save and torch.load.
+    """
+    # TODO: (chenyang) Add support for Qwen models.
+    try:
+        return model.get_weights_by_name(name, truncate_size, tp_size=tp_size)
+    except Exception as e:
+        logger.error(f"Error when getting parameter {name}: {e}")
+        return None

@@ -197,8 +197,11 @@ class BaseTpWorker(ABC):
         return success, message
 
     def get_weights_by_name(self, recv_req: GetWeightsByNameReqInput):
-        parameter = self.model_runner.get_weights_by_name(
-            recv_req.name, recv_req.truncate_size
+        parameter = weight_exporter.get_weights_by_name(
+            model=self.model_runner.model,
+            tp_size=self.model_runner.tp_size,
+            name=recv_req.name,
+            truncate_size=recv_req.truncate_size,
         )
         return parameter
 
