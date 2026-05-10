@@ -34,22 +34,7 @@ import torch.distributed as dist
 from torch import nn
 
 from sglang.jit_kernel.ngram_embedding import update_token_table
-from sglang.srt.configs import (
-    BailingHybridConfig,
-    FalconH1Config,
-    GraniteMoeHybridConfig,
-    JetNemotronConfig,
-    JetVLMConfig,
-    KimiLinearConfig,
-    Lfm2Config,
-    Lfm2MoeConfig,
-    Lfm2VlConfig,
-    NemotronH_Nano_VL_V2_Config,
-    NemotronHConfig,
-    Qwen3_5Config,
-    Qwen3_5MoeConfig,
-    Qwen3NextConfig,
-)
+from sglang.srt.configs import hybrid_arch
 from sglang.srt.configs.device_config import DeviceConfig
 from sglang.srt.configs.linear_attn_model_registry import get_linear_attn_config
 from sglang.srt.configs.load_config import LoadConfig, LoadFormat
@@ -1729,71 +1714,23 @@ class ModelRunner(ModelRunnerKVCacheMixin):
 
     @property
     def qwen3_next_config(self):
-        config = self.model_config.hf_config
-        if isinstance(config, Qwen3NextConfig):
-            return config
-        return None
+        return hybrid_arch.qwen3_next_config(model_runner_ref=self)
 
     @property
     def hybrid_lightning_config(self):
-        config = self.model_config.hf_config
-        if isinstance(config, BailingHybridConfig):
-            return config
-        return None
+        return hybrid_arch.hybrid_lightning_config(model_runner_ref=self)
 
     @property
     def hybrid_gdn_config(self):
-        config = self.model_config.hf_config.get_text_config()
-        if isinstance(
-            config,
-            Qwen3NextConfig
-            | Qwen3_5Config
-            | Qwen3_5MoeConfig
-            | JetNemotronConfig
-            | JetVLMConfig,
-        ):
-            return config
-        return None
+        return hybrid_arch.hybrid_gdn_config(model_runner_ref=self)
 
     @property
     def mamba2_config(self):
-        config = self.model_config.hf_config
-        if isinstance(config, NemotronHConfig) and self.is_draft_worker:
-            # NemotronH MTP draft models have no Mamba layers (pattern like "*E")
-            # so they shouldn't use HybridLinearAttnBackend
-            pattern = getattr(config, "mtp_hybrid_override_pattern", None)
-            if pattern is not None and "M" not in pattern:
-                return None
-        if isinstance(
-            config,
-            FalconH1Config
-            | NemotronHConfig
-            | Lfm2Config
-            | Lfm2MoeConfig
-            | Lfm2VlConfig,
-        ):
-            return config
-        if isinstance(config, NemotronH_Nano_VL_V2_Config):
-            return config.llm_config
-
-        if isinstance(config, GraniteMoeHybridConfig):
-            has_mamba = any(
-                layer_type == "mamba"
-                for layer_type in getattr(config, "layer_types", [])
-            )
-            if not has_mamba:
-                return None
-            else:
-                return config
-
-        return None
+        return hybrid_arch.mamba2_config(model_runner_ref=self)
 
     @property
     def kimi_linear_config(self):
-        config = self.model_config.hf_config
-        if isinstance(config, KimiLinearConfig):
-            return config
-        return None
+        return hybrid_arch.kimi_linear_config(model_runner_ref=self)
 
     def _get_linear_attn_registry_result(self):
         if self._linear_attn_registry_cache is _UNSET:
@@ -1804,21 +1741,11 @@ class ModelRunner(ModelRunnerKVCacheMixin):
 
     @property
     def linear_attn_model_spec(self):
-        result = self._get_linear_attn_registry_result()
-        return result[0] if result else None
+        return hybrid_arch.linear_attn_model_spec(model_runner_ref=self)
 
     @property
     def mambaish_config(self):
-        existing = (
-            self.mamba2_config
-            or self.hybrid_gdn_config
-            or self.kimi_linear_config
-            or self.hybrid_lightning_config
-        )
-        if existing:
-            return existing
-        result = self._get_linear_attn_registry_result()
-        return result[1] if result else None
+        return hybrid_arch.mambaish_config(model_runner_ref=self)
 
     def init_attention_backend(self):
         """Init attention kernel backend."""
