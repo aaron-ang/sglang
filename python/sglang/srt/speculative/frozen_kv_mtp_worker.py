@@ -25,6 +25,7 @@ from typing import List, Optional, Tuple
 
 import torch
 
+from sglang.srt.configs import hybrid_arch
 from sglang.srt.layers.logits_processor import LogitsProcessorOutput
 from sglang.srt.layers.moe.utils import (
     speculative_moe_a2a_backend_context,
@@ -753,9 +754,18 @@ class FrozenKVMTPWorker(TpModelWorker):
         logits_output.hidden_states = logits_output.hidden_states[res.accepted_indices]
 
         if (
-            self.target_worker.model_runner.hybrid_gdn_config is not None
-            or self.target_worker.model_runner.mamba2_config is not None
-            or self.target_worker.model_runner.hybrid_lightning_config is not None
+            hybrid_arch.hybrid_gdn_config(
+                model_runner_ref=self.target_worker.model_runner
+            )
+            is not None
+            or hybrid_arch.mamba2_config(
+                model_runner_ref=self.target_worker.model_runner
+            )
+            is not None
+            or hybrid_arch.hybrid_lightning_config(
+                model_runner_ref=self.target_worker.model_runner
+            )
+            is not None
         ):
             logger.warning(
                 "Frozen-KV MTP does not implement mamba state updates; "

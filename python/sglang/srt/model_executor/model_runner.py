@@ -34,7 +34,6 @@ import torch.distributed as dist
 from torch import nn
 
 from sglang.jit_kernel.ngram_embedding import update_token_table
-from sglang.srt.configs import hybrid_arch
 from sglang.srt.configs.device_config import DeviceConfig
 from sglang.srt.configs.linear_attn_model_registry import get_linear_attn_config
 from sglang.srt.configs.load_config import LoadConfig, LoadFormat
@@ -1712,40 +1711,12 @@ class ModelRunner(ModelRunnerKVCacheMixin):
 
         return result
 
-    @property
-    def qwen3_next_config(self):
-        return hybrid_arch.qwen3_next_config(model_runner_ref=self)
-
-    @property
-    def hybrid_lightning_config(self):
-        return hybrid_arch.hybrid_lightning_config(model_runner_ref=self)
-
-    @property
-    def hybrid_gdn_config(self):
-        return hybrid_arch.hybrid_gdn_config(model_runner_ref=self)
-
-    @property
-    def mamba2_config(self):
-        return hybrid_arch.mamba2_config(model_runner_ref=self)
-
-    @property
-    def kimi_linear_config(self):
-        return hybrid_arch.kimi_linear_config(model_runner_ref=self)
-
     def _get_linear_attn_registry_result(self):
         if self._linear_attn_registry_cache is _UNSET:
             self._linear_attn_registry_cache = get_linear_attn_config(
                 self.model_config.hf_config
             )
         return self._linear_attn_registry_cache
-
-    @property
-    def linear_attn_model_spec(self):
-        return hybrid_arch.linear_attn_model_spec(model_runner_ref=self)
-
-    @property
-    def mambaish_config(self):
-        return hybrid_arch.mambaish_config(model_runner_ref=self)
 
     def init_attention_backend(self):
         """Init attention kernel backend."""

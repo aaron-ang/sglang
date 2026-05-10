@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Optional
 
 import torch
 
+from sglang.srt.configs import hybrid_arch
 from sglang.srt.configs.model_config import (
     get_nsa_index_head_dim,
     is_deepseek_nsa,
@@ -92,7 +93,7 @@ class DefaultPoolConfigurator(MemoryPoolConfigurator):
 
     def __init__(self, mr: ModelRunner):
         # Determine effective number of layers for KV cache
-        if mambaish := mr.mambaish_config:
+        if mambaish := hybrid_arch.mambaish_config(model_runner_ref=mr):
             effective_layer_ids = [
                 i
                 for i in mambaish.full_attention_layer_ids
