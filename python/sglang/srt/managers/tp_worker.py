@@ -170,7 +170,11 @@ class BaseTpWorker(ABC):
     def update_weights_from_tensor(self, recv_req: UpdateWeightsFromTensorReqInput):
 
         monkey_patch_torch_reductions()
-        success, message = self.model_runner.update_weights_from_tensor(
+        success, message = weight_updater.update_weights_from_tensor(
+            model=self.model_runner.model,
+            tp_rank=self.model_runner.tp_rank,
+            device=self.model_runner.device,
+            custom_weight_loader=self.model_runner.server_args.custom_weight_loader,
             named_tensors=MultiprocessingSerializer.deserialize(
                 recv_req.serialized_named_tensors[self.tp_rank]
             ),

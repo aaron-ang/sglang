@@ -252,3 +252,108 @@ def _update_bucketed_weights_from_distributed(
         )
         logger.error(error_msg)
         return False, error_msg
+
+
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
+
+from sglang.srt.model_loader.weight_utils import default_weight_loader
+from sglang.srt.utils import MultiprocessingSerializer, dynamic_import
+from sglang.srt.utils.patch_torch import monkey_patch_torch_reductions
+from sglang.srt.weight_sync.tensor_bucket import (
+    FlattenedTensorBucket,
+    FlattenedTensorMetadata,
+)
+
+
+def _model_load_weights_direct(model, named_tensors: List[Tuple[str, torch.Tensor]]):
+    params_dict = dict(model.named_parameters())
+    for name, tensor in named_tensors:
+        default_weight_loader(params_dict[name], tensor)
+
+
+def _unwrap_tensor(tensor, tp_rank, device):
+    if isinstance(tensor, LocalSerializedTensor):
+        tensor = tensor.get(tp_rank)
+    return tensor.to(device)
+
+
+@dataclass
+class LocalSerializedTensor:
+    """torch.Tensor that gets serialized by MultiprocessingSerializer (which only serializes a pointer and not the data).
+    The i-th element in the list corresponds to i-th rank's GPU."""
+
+    values: List[bytes]
+
+    def get(self, rank: int):
+        return MultiprocessingSerializer.deserialize(self.values[rank])
+
+
+def _update_weights_from_flattened_bucket(
+    *,
+    model,
+    flattened_tensor_bucket_dict,
+):
+    """Handle flattened bucket format for weight updates"""
+    flattened_tensor = flattened_tensor_bucket_dict["flattened_tensor"]
+    metadata = flattened_tensor_bucket_dict["metadata"]
+
+    # Convert metadata dict to our format
+    converted_metadata = []
+    for meta in metadata:
+        converted_meta = FlattenedTensorMetadata(
+            name=meta.name,
+            shape=meta.shape,
+            dtype=meta.dtype,
+            start_idx=meta.start_idx,
+            end_idx=meta.end_idx,
+            numel=meta.numel,
+        )
+        converted_metadata.append(converted_meta)
+
+    # Create bucket and reconstruct tensors
+    bucket = FlattenedTensorBucket(
+        flattened_tensor=flattened_tensor, metadata=converted_metadata
+    )
+    reconstructed_tensors = bucket.reconstruct_tensors()
+
+    # Load the reconstructed tensors using the standard method
+    model.load_weights(reconstructed_tensors)
+
+    return True, "Success"
+
+
+def update_weights_from_tensor(
+    *,
+    model,
+    tp_rank,
+    device,
+    custom_weight_loader,
+    named_tensors: List[Tuple[str, Union[torch.Tensor, "LocalSerializedTensor"]]],
+    load_format: Optional[str] = None,
+):
+    monkey_patch_torch_reductions()
+    if load_format == "flattened_bucket":
+        # Handle flattened bucket format
+        return _update_weights_from_flattened_bucket(
+            model=model, flattened_tensor_bucket_dict=named_tensors
+        )
+
+    # We need to get device after patch otherwise the device would be wrong
+    device_module = torch.get_device_module(device)
+    infered_device = device_module.current_device()
+
+    named_tensors = [
+        (name, _unwrap_tensor(tensor, tp_rank=tp_rank, device=infered_device))
+        for name, tensor in named_tensors
+    ]
+    if load_format == "direct":
+        _model_load_weights_direct(model, named_tensors)
+    elif load_format in custom_weight_loader:
+        custom_loader = dynamic_import(load_format)
+        custom_loader(model, named_tensors)
+    elif load_format is None:
+        model.load_weights(named_tensors)
+    else:
+        raise NotImplementedError(f"Unknown load_format={load_format}")
+    return True, "Success"
